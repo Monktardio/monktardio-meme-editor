@@ -106,6 +106,14 @@
       user-select: none;
     }
 
+    #loadingMsg {
+      text-align: center;
+      font-size: 9px;
+      color: #555;
+      margin-top: 4px;
+      min-height: 14px;
+    }
+
     @media (max-width: 600px) {
       input[type="number"],
       input[type="text"],
@@ -163,8 +171,9 @@
   </div>
 
   <div class="win95-frame">
-    <canvas id="memeCanvas" ></canvas>
+    <canvas id="memeCanvas"></canvas>
   </div>
+  <div id="loadingMsg"></div>
 
   <div class="row download-row">
     <button onclick="downloadImage()">Download</button>
@@ -175,6 +184,7 @@
     const overlayList = ["GatorHead", "Gmonktardio", "GodZillaHead", "HAHAHAHA", "Sweeper", "ThugLife", "GMCup", "Machete", "IceBreaker", "BAG", "Burn", "DarkCloud", "WireCatch", "LoveBomb", "LittleRed", "Money", "MachineGuN", "Popcorn", "Trippy", "Smoke", "MAYC", "ApeHelm"];
     const canvas = document.getElementById("memeCanvas");
     const ctx = canvas.getContext("2d");
+    const loadingMsg = document.getElementById("loadingMsg");
 
     let overlays = [];
     let texts = {};
@@ -190,17 +200,38 @@
       overlaySelect.appendChild(option);
     });
 
-  function loadNFT(id) {
+    // ── NFT laden mit mehreren IPFS Gateway Fallbacks ──────────
+    const CID = "bafybeiamvpd34u2bdn6ocaiybjqjkpytnhwcfcoooakkv4bd34tymrzv5e";
+    const GATEWAYS = [
+      id => `https://ipfs.io/ipfs/${CID}/${id}.webp`,
+      id => `https://gateway.pinata.cloud/ipfs/${CID}/${id}.webp`,
+      id => `https://dweb.link/ipfs/${CID}/${id}.webp`,
+      id => `https://hardbin.com/ipfs/${CID}/${id}.webp`,
+    ];
+
+    function loadNFT(id) {
       if (!id || id < 1 || id > 2222) return;
-      const url = `https://nftstorage.link/ipfs/bafybeiamvpd34u2bdn6ocaiybjqjkpytnhwcfcoooakkv4bd34tymrzv5e/${id}.webp`;
+      loadingMsg.textContent = "Loading NFT...";
+      tryGateway(id, 0);
+    }
+
+    function tryGateway(id, index) {
+      if (index >= GATEWAYS.length) {
+        loadingMsg.textContent = "Could not load image. Try again.";
+        return;
+      }
       const img = new Image();
       img.crossOrigin = "anonymous";
       img.onload = () => {
         baseImage = img;
+        loadingMsg.textContent = "Loaded #" + id + " ✓";
         drawAll();
       };
-      img.onerror = () => alert("Failed to load image.");
-      img.src = url;
+      img.onerror = () => {
+        loadingMsg.textContent = "Trying gateway " + (index + 2) + "...";
+        tryGateway(id, index + 1);
+      };
+      img.src = GATEWAYS[index](id);
     }
 
     function loadRandomNFT() {
@@ -241,42 +272,36 @@
       }
     }
 
-function addOverlay() {
-  const name = overlaySelect.value;
-  if (!name) {
-    // "None" ausgewählt – Alle Overlays löschen:
-    overlays = [];
-    drawAll();
-    return;
-  }
-
-  // Prüfen, ob das Overlay bereits geladen wurde:
-  const alreadyExists = overlays.some(o => o.name === name);
-  if (alreadyExists) {
-    alert(`Overlay '${name}' ist bereits hinzugefügt.`);
-    return;
-  }
-
-  // Overlay laden und hinzufügen:
-  const img = new Image();
-  img.src = `./overlays/monktardio_overlay_${name}.png`;
-  img.onload = () => {
-    overlays.push({ name, img, x: 0, y: 0 }); // Mehrere Overlays stapeln möglich
-    drawAll();
-  };
-  img.onerror = () => alert(`Overlay '${name}' konnte nicht geladen werden.`);
-}
+    function addOverlay() {
+      const name = overlaySelect.value;
+      if (!name) {
+        overlays = [];
+        drawAll();
+        return;
+      }
+      const alreadyExists = overlays.some(o => o.name === name);
+      if (alreadyExists) {
+        alert("Overlay '" + name + "' ist bereits hinzugefügt.");
+        return;
+      }
+      const img = new Image();
+      img.src = "./overlays/monktardio_overlay_" + name + ".png";
+      img.onload = () => {
+        overlays.push({ name, img, x: 0, y: 0 });
+        drawAll();
+      };
+      img.onerror = () => alert("Overlay '" + name + "' konnte nicht geladen werden.");
+    }
 
     function drawAll() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       if (baseImage) ctx.drawImage(baseImage, 0, 0, canvas.width, canvas.height);
       overlays.forEach(o => ctx.drawImage(o.img, o.x, o.y, canvas.width, canvas.height));
-
       Object.values(texts).forEach(t => {
-        ctx.font = `bold ${t.size}px 'Anton', Impact, sans-serif`;
+        ctx.font = "bold " + t.size + "px 'Anton', Impact, sans-serif";
         ctx.textAlign = "center";
         ctx.fillStyle = "#000";
-        ctx.fillText(t.text, t.x + 2, t.y + 2); // Shadow
+        ctx.fillText(t.text, t.x + 2, t.y + 2);
         ctx.fillStyle = t.color;
         ctx.fillText(t.text, t.x, t.y);
       });
@@ -284,15 +309,10 @@ function addOverlay() {
 
     function detectDrag(x, y) {
       for (const [id, t] of Object.entries(texts)) {
-        ctx.font = `bold ${t.size}px 'Anton', Impact, sans-serif`;
+        ctx.font = "bold " + t.size + "px 'Anton', Impact, sans-serif";
         const width = ctx.measureText(t.text).width;
         const height = t.size;
-        if (
-          x >= t.x - width / 2 &&
-          x <= t.x + width / 2 &&
-          y >= t.y - height &&
-          y <= t.y
-        ) {
+        if (x >= t.x - width / 2 && x <= t.x + width / 2 && y >= t.y - height && y <= t.y) {
           draggingTextId = id;
           offsetX = x - t.x;
           offsetY = y - t.y;
@@ -308,7 +328,6 @@ function addOverlay() {
       drawAll();
     }
 
-    // Mouse events
     canvas.addEventListener("mousedown", e => {
       const rect = canvas.getBoundingClientRect();
       detectDrag(e.clientX - rect.left, e.clientY - rect.top);
@@ -319,14 +338,9 @@ function addOverlay() {
         moveText(e.clientX - rect.left, e.clientY - rect.top);
       }
     });
-    canvas.addEventListener("mouseup", () => {
-      draggingTextId = null;
-    });
-    canvas.addEventListener("mouseleave", () => {
-      draggingTextId = null;
-    });
+    canvas.addEventListener("mouseup", () => { draggingTextId = null; });
+    canvas.addEventListener("mouseleave", () => { draggingTextId = null; });
 
-    // Touch events
     canvas.addEventListener("touchstart", e => {
       e.preventDefault();
       const rect = canvas.getBoundingClientRect();
@@ -341,36 +355,35 @@ function addOverlay() {
         moveText(touch.clientX - rect.left, touch.clientY - rect.top);
       }
     });
-    canvas.addEventListener("touchend", () => {
-      draggingTextId = null;
-    });
+    canvas.addEventListener("touchend", () => { draggingTextId = null; });
 
     function resetCanvas() {
       overlays = [];
       texts = {};
+      baseImage = null;
+      loadingMsg.textContent = "";
       drawAll();
     }
 
     function downloadImage() {
       const link = document.createElement("a");
-      link.download = `monktardio_meme_${Date.now()}.png`;
+      link.download = "monktardio_meme_" + Date.now() + ".png";
       link.href = canvas.toDataURL();
       link.click();
     }
 
     function shareOnX() {
-  	const text = encodeURIComponent("Just made this masterpiece with the Monktardio Meme Editor! 🔥🐵 #Monktardio #NFT #Apechain");
-  	const url = encodeURIComponent("https://monktard.io");
-  	window.open(`https://twitter.com/intent/tweet?text=${text}&url=${url}`, "_blank");
-	}
+      const text = encodeURIComponent("Just made this masterpiece with the Monktardio Meme Editor! 🔥🐵 #Monktardio #NFT #Apechain");
+      const url = encodeURIComponent("https://monktard.io");
+      window.open("https://twitter.com/intent/tweet?text=" + text + "&url=" + url, "_blank");
+    }
 
-    // Dynamische Canvas-Größe setzen
     function resizeCanvas() {
       const maxSize = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--canvas-max-size'));
       const minSize = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--canvas-min-size'));
       const width = Math.min(maxSize, Math.max(minSize, window.innerWidth - 20));
       canvas.width = width;
-      canvas.height = width; // quadratisch
+      canvas.height = width;
       drawAll();
     }
 
@@ -379,7 +392,6 @@ function addOverlay() {
       resizeCanvas();
       loadRandomNFT();
     });
-
   </script>
 </body>
 </html>
