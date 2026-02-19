@@ -200,38 +200,40 @@
       overlaySelect.appendChild(option);
     });
 
-    // ── NFT laden mit mehreren IPFS Gateway Fallbacks ──────────
-    const CID = "bafybeiamvpd34u2bdn6ocaiybjqjkpytnhwcfcoooakkv4bd34tymrzv5e";
-    const GATEWAYS = [
-      id => `https://ipfs.io/ipfs/${CID}/${id}.webp`,
-      id => `https://gateway.pinata.cloud/ipfs/${CID}/${id}.webp`,
-      id => `https://dweb.link/ipfs/${CID}/${id}.webp`,
-      id => `https://hardbin.com/ipfs/${CID}/${id}.webp`,
-    ];
+    // ── NFT laden via Magic Eden CDN (CORS-safe) ─────────────
+    const CONTRACT = "0x8fcf0a407c3a6f50a3f27b0528eaefb14c49222d";
 
     function loadNFT(id) {
       if (!id || id < 1 || id > 2222) return;
-      loadingMsg.textContent = "Loading NFT...";
-      tryGateway(id, 0);
-    }
-
-    function tryGateway(id, index) {
-      if (index >= GATEWAYS.length) {
-        loadingMsg.textContent = "Could not load image. Try again.";
-        return;
-      }
-      const img = new Image();
-      img.crossOrigin = "anonymous";
-      img.onload = () => {
-        baseImage = img;
-        loadingMsg.textContent = "Loaded #" + id + " ✓";
-        drawAll();
-      };
-      img.onerror = () => {
-        loadingMsg.textContent = "Trying gateway " + (index + 2) + "...";
-        tryGateway(id, index + 1);
-      };
-      img.src = GATEWAYS[index](id);
+      loadingMsg.textContent = "Loading NFT #" + id + "...";
+      
+      // Magic Eden API gibt uns die Bild-URL
+      const apiUrl = "https://api-mainnet.magiceden.dev/v3/rtp/apechain/tokens/v6?collection=" + CONTRACT + "&tokenId=" + id + "&limit=1";
+      
+      fetch(apiUrl)
+        .then(r => r.json())
+        .then(data => {
+          const imageUrl = data?.tokens?.[0]?.token?.image;
+          if (!imageUrl) throw new Error("No image");
+          return imageUrl;
+        })
+        .catch(() => {
+          // Fallback: direkt via IPFS cors-proxy
+          return "https://corsproxy.io/?" + encodeURIComponent("https://nftstorage.link/ipfs/bafybeiamvpd34u2bdn6ocaiybjqjkpytnhwcfcoooakkv4bd34tymrzv5e/" + id + ".webp");
+        })
+        .then(imageUrl => {
+          const img = new Image();
+          img.crossOrigin = "anonymous";
+          img.onload = () => {
+            baseImage = img;
+            loadingMsg.textContent = "Loaded #" + id + " ✓";
+            drawAll();
+          };
+          img.onerror = () => {
+            loadingMsg.textContent = "Failed to load. Try another ID.";
+          };
+          img.src = imageUrl;
+        });
     }
 
     function loadRandomNFT() {
